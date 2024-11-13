@@ -1,0 +1,15 @@
+{
+  "name": "openapi-unbundler",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "bundle": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "2underscores",
+  "license": "ISC",
+  "dependencies": {
+    "@redocly/cli": "^1.25.11"
+  }
+}
