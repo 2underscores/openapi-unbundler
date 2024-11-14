@@ -11,14 +11,10 @@ const writeYaml = async (path, contents) => {
         await fs.promises.mkdir(dirname(path), { recursive: true });
         await fs.promises.writeFile(
             path,
-            yaml.dump(
-                contents,
-                {
-                    lineWidth: -1,
-                }
-            ));
+            yaml.dump(contents,{lineWidth: -1,})
+        );
       } catch (error) {
-        throw error;
+        throw error; // lol, TODO: make work blank file
       }
 }
 
@@ -49,13 +45,8 @@ const removeUntaggedMethodsFromPathItem = (pathItem, targetTags) => {
 
 
 
-
-
-
-
-
-
 const timestamp = Date.now().toString()
+const apiFileSuffix = 'openapi.yaml'
 // const timestamp = 'hardcoded' // TODO: remove
 const originalFile = path.join('testfiles', 'original', 'petstore-tag-grouped.yaml')
 const unbundledDir = path.join('testfiles', 'unbundled', timestamp)
@@ -87,17 +78,21 @@ for (const tagGroup of schemaToSplit['x-tagGroups']) {
     groupedSchema.paths = paths
     // TODO: parallel promises
     const tagGroupFile = tagGroup.name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
-    await writeYaml(path.join(unbundledDir, `${tagGroupFile}-openapi.yaml`), groupedSchema)
+    await writeYaml(
+        path.join(unbundledDir,`${tagGroupFile}-${apiFileSuffix}`),
+        groupedSchema
+    )
 }
 
-// // Rebundling
-// const rebundledSchema = await $RefParser.bundle(path.join(unbundledDir, `${fileName}.yaml`));
-// console.log(rebundledSchema);
-// await writeFile( // TODO: uncomment
-//     path.join(rebundledDir, `${fileName}.yaml`), 
-//     yaml.dump(
-//         schema,
-//         {
-//             lineWidth: -1
-//         }
-//     ))
+const files = (await fs.promises.readdir(unbundledDir)).filter(f=>f.endsWith(apiFileSuffix))
+console.log({files});
+// Rebundling
+for (const file of files) {
+    const rebundledSchema = await $RefParser.bundle(path.join(unbundledDir, file));
+    console.log({rebundledSchema});
+    await writeYaml(
+        path.join(rebundledDir, file), 
+        rebundledSchema,
+    )
+}
+
