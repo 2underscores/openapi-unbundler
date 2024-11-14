@@ -7,15 +7,11 @@ import yaml from 'js-yaml'
 // Lot of weird variable names, following the spec - https://learn.openapis.org/specification/
 
 const writeYaml = async (path, contents) => {
-    try {
-        await fs.promises.mkdir(dirname(path), { recursive: true });
-        await fs.promises.writeFile(
-            path,
-            yaml.dump(contents,{lineWidth: -1,})
-        );
-      } catch (error) {
-        throw error; // lol, TODO: make work blank file
-      }
+    await fs.promises.mkdir(dirname(path), { recursive: true });
+    await fs.promises.writeFile(
+        path,
+        yaml.dump(contents,{lineWidth: -1,})
+    );
 }
 
 const intersect = (a, b) => {
@@ -23,7 +19,7 @@ const intersect = (a, b) => {
     return [...new Set(a)].filter(x => setB.has(x));
 }
 
-const removeUntaggedMethodsFromPathItem = (pathItem, targetTags) => {
+const filterPathItemMethodsByTags = (pathItem, targetTags, filterForHasTag=true) => {
     // Might need an "untagged" one to sweep untagged endpoint into one
     const pathItemMethodKeys = ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace'] // https://spec.openapis.org/oas/v3.1.0#path-item-object
     const PathItemKeys = Object.keys(pathItem)
@@ -31,7 +27,7 @@ const removeUntaggedMethodsFromPathItem = (pathItem, targetTags) => {
     const PathItemKeysNoUntaggedMethodKeys = PathItemKeys.filter(k=>{
         const isMethodKey = pathItemMethodKeys.includes(k)
         const noTargetTag = !intersect(pathItem[k].tags ?? [], targetTags).length
-        return !(isMethodKey && noTargetTag)
+        return (filterForHasTag) ? !(isMethodKey && noTargetTag) : (isMethodKey && noTargetTag) 
     })
     console.log({PathItemKeysNoUntaggedMethodKeys});
     const strippedPathItem = {}
@@ -54,6 +50,9 @@ const sharedComponentFile = 'components.yaml'
 const originalSchema = await $RefParser.bundle(originalFile); // In case URL/other refs
 let schemaToSplit = structuredClone(originalSchema)
 // Pull out shared components file
+// TODO: optimise. All references actually need to point direct to external file.
+// Right now they all point components, which points to external file
+// This means on rebundle, everything is reimported
 const components = {components: schemaToSplit.components}
 const componentsFile = path.join(unbundledDir, sharedComponentFile)
 await writeYaml(componentsFile, components)
@@ -67,7 +66,7 @@ for (const tagGroup of schemaToSplit['x-tagGroups']) {
     // Only include paths that have keys in the tag group
     for (const path of Object.keys(groupedSchema.paths)) {
         console.log(path);
-        const strippedPath = removeUntaggedMethodsFromPathItem(groupedSchema.paths[path], tagGroup.tags)
+        const strippedPath = filterPathItemMethodsByTags(groupedSchema.paths[path], tagGroup.tags)
         if (Object.keys(strippedPath).length) {
             paths[path] = strippedPath
         }
@@ -81,6 +80,26 @@ for (const tagGroup of schemaToSplit['x-tagGroups']) {
         groupedSchema
     )
 }
+// Write file for all missing tags
+const untaggedRoutesApiName = 'Ungrouped APIs' // hardcoded filename
+const allGroupedTags = schemaToSplit['x-tagGroups'].reduce((allTags, tagGrp)=>[...allTags, ...tagGrp.tags], [])
+console.log({allGroupedTags});
+const groupedSchema = structuredClone(schemaToSplit)
+groupedSchema.info.title = untaggedRoutesApiName // Naming the API spec
+let paths = {}
+for (const path of Object.keys(groupedSchema.paths)) {
+    console.log(path);
+    const strippedPath = filterPathItemMethodsByTags(groupedSchema.paths[path], allGroupedTags, false) // Inverted, different tag set
+    if (Object.keys(strippedPath).length) {
+        paths[path] = strippedPath
+    }
+}
+groupedSchema.paths = paths
+const tagGroupFile = untaggedRoutesApiName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+await writeYaml(
+    path.join(unbundledDir,`${tagGroupFile}-${apiFileSuffix}`),
+    groupedSchema
+)
 
 // Rebundling the shared components to each API
 const files = (await fs.promises.readdir(unbundledDir)).filter(f=>f.endsWith(apiFileSuffix))
