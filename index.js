@@ -1,26 +1,42 @@
-const { bundle } = require('@redocly/cli');
+import $RefParser from "@apidevtools/json-schema-ref-parser"
+import fs from 'fs'
+import path from 'path'
+import { dirname } from 'path'  // Changed this line
+import yaml from 'js-yaml'
 
-async function bundleSpec(params) {
+const writeFile = async (path, contents) => {
     try {
-        const result = await bundle({
-          ref: './path/to/your/spec.yaml', // Entry point
-          output: './bundled-spec.yaml',    // Output file
-          // Other options:
-          // dereferenced: true,           // Fully dereference all $refs
-          // format: 'json',               // Output format
-          // lint: true,                   // Run linting
-        });
-        console.log('Bundle success:', result);
+        await fs.promises.mkdir(dirname(path), { recursive: true });
+        await fs.promises.writeFile(path, contents);
       } catch (error) {
-        console.error('Bundle failed:', error);
+        throw error;
       }
 }
 
-async function wrapBundler(filename) {
-    return await bundleSpec({
-        ref: `./testfiles/unbundled/${filename}.yaml`,
-        output: `./testfiles/rebundled/${filename}.yaml`,
-    })
-}
+const timestamp = Date.now()
+// const timestamp = 'hardcoded' // TODO: remove
+const originalFile = path.join('testfiles', 'original', 'petstore-tag-grouped.yaml')
+const unbundledDir = path.join('testfiles', 'unbundled', timestamp)
+const rebundledDir = path.join('testfiles', 'rebundled', timestamp)
+const fileName = 'petstoreSplitRest'
+// Unbundling
+const originalSchema = await $RefParser.bundle(originalFile); // In case URL/other refs
+let schemaToSplit = structuredClone(originalSchema)
+// TODO: pull out shared components
+const components = {components: schemaToSplit.components}
+const componentsFile = path.join(unbundledDir, 'components.yaml')
+schemaToSplit.components = {'$ref': `${componentsFile}#/components`}
+await writeFile(componentsFile, components)
+await writeFile(path.join(unbundledDir, 'unsplitAPI.yaml'), schemaToSplit)
 
-wrapBundler('petstoreSplitPet')
+// Rebundling
+const rebundledSchema = await $RefParser.bundle(path.join(unbundledDir, `${fileName}.yaml`));
+console.log(rebundledSchema);
+// await writeFile( // TODO: uncomment
+//     path.join(rebundledDir, `${fileName}.yaml`), 
+//     yaml.dump(
+//         schema,
+//         {
+//             lineWidth: -1
+//         }
+//     ))
