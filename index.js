@@ -4,16 +4,23 @@ import path from 'path'
 import { dirname } from 'path'  // Changed this line
 import yaml from 'js-yaml'
 
-const writeFile = async (path, contents) => {
+const writeYaml = async (path, contents) => {
     try {
         await fs.promises.mkdir(dirname(path), { recursive: true });
-        await fs.promises.writeFile(path, contents);
+        await fs.promises.writeFile(
+            path,
+            yaml.dump(
+                contents,
+                {
+                    lineWidth: -1,
+                }
+            ));
       } catch (error) {
         throw error;
       }
 }
 
-const timestamp = Date.now()
+const timestamp = Date.now().toString()
 // const timestamp = 'hardcoded' // TODO: remove
 const originalFile = path.join('testfiles', 'original', 'petstore-tag-grouped.yaml')
 const unbundledDir = path.join('testfiles', 'unbundled', timestamp)
@@ -25,13 +32,13 @@ let schemaToSplit = structuredClone(originalSchema)
 // TODO: pull out shared components
 const components = {components: schemaToSplit.components}
 const componentsFile = path.join(unbundledDir, 'components.yaml')
-schemaToSplit.components = {'$ref': `${componentsFile}#/components`}
-await writeFile(componentsFile, components)
-await writeFile(path.join(unbundledDir, 'unsplitAPI.yaml'), schemaToSplit)
+schemaToSplit.components = {'$ref': `./components.yaml#/components`}
+await writeYaml(componentsFile, components)
+await writeYaml(path.join(unbundledDir, 'unsplitAPI.yaml'), schemaToSplit)
 
-// Rebundling
-const rebundledSchema = await $RefParser.bundle(path.join(unbundledDir, `${fileName}.yaml`));
-console.log(rebundledSchema);
+// // Rebundling
+// const rebundledSchema = await $RefParser.bundle(path.join(unbundledDir, `${fileName}.yaml`));
+// console.log(rebundledSchema);
 // await writeFile( // TODO: uncomment
 //     path.join(rebundledDir, `${fileName}.yaml`), 
 //     yaml.dump(
